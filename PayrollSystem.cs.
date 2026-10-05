@@ -1,0 +1,640 @@
+using System;
+using System.Collections.Generic;
+using System.Text;
+
+namespace PayrollSystem
+{
+    public class BonusRecord
+    {
+        public double Amount { get; }
+        public string Reason { get; }
+
+        public BonusRecord(double amount, string reason)
+        {
+            Amount = amount;
+            Reason = reason;
+        }
+
+        public override string ToString()
+        {
+            return $"{Amount:N0} VNĐ ({Reason})";
+        }
+    }
+
+    // B.1. Lớp cơ sở trừu tượng Employee (A.2, A.4, A.5, A.6)
+    public abstract class Employee
+    {
+        private string employeeId;
+        private string fullName;
+        private string department;
+        private double monthlyBonus;
+        private readonly List<BonusRecord> bonusHistory;
+
+        public string EmployeeId
+        {
+            get => employeeId;
+            private set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    throw new ArgumentException("Mã nhân sự không được để trống.");
+                employeeId = value.Trim();
+            }
+        }
+
+        public string FullName
+        {
+            get => fullName;
+            private set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    throw new ArgumentException("Họ tên không được để trống.");
+                fullName = value.Trim();
+            }
+        }
+
+        public string Department
+        {
+            get => department;
+            private set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    throw new ArgumentException("Phòng ban không được để trống.");
+                department = value.Trim();
+            }
+        }
+
+        public double MonthlyBonus
+        {
+            get => monthlyBonus;
+            private set
+            {
+                if (value < 0)
+                    throw new ArgumentException("Tổng thưởng không được âm.");
+                monthlyBonus = value;
+            }
+        }
+
+        public IReadOnlyList<BonusRecord> BonusHistory => bonusHistory.AsReadOnly();
+
+        // Constructor đầy đủ của Employee
+        protected Employee(string employeeId, string fullName, string department)
+        {
+            EmployeeId = employeeId;
+            FullName = fullName;
+            Department = department;
+            MonthlyBonus = 0;
+            bonusHistory = new List<BonusRecord>();
+        }
+
+        // Constructor rút gọn: ủy quyền (chaining) sang constructor 3 tham số
+        protected Employee(string employeeId, string fullName)
+            : this(employeeId, fullName, "Unassigned")
+        {
+        }
+
+        // Nạp chồng 1: Thêm khoản thưởng cố định
+        public void addBonus(double amount)
+        {
+            addBonus(amount, "Thưởng cố định trong tháng");
+        }
+
+        // Nạp chồng 2: Thêm khoản thưởng cố định kèm lý do
+        public void addBonus(double amount, string reason)
+        {
+            if (amount <= 0)
+                throw new ArgumentException("Số tiền thưởng (amount) phải lớn hơn 0.");
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new ArgumentException("Lý do thưởng (reason) không được để trống.");
+
+            MonthlyBonus += amount;
+            bonusHistory.Add(new BonusRecord(amount, reason.Trim()));
+        }
+
+        // Nạp chồng 3: Tính thưởng theo tỷ lệ của giá trị tham chiếu, kèm lý do
+        public void addBonus(double rate, double referenceAmount, string reason)
+        {
+            if (rate <= 0 || rate > 0.5)
+                throw new ArgumentException("Tỷ lệ thưởng (rate) phải lớn hơn 0 và không quá 0.5 (50%).");
+            if (referenceAmount <= 0)
+                throw new ArgumentException("Giá trị tham chiếu (referenceAmount) phải lớn hơn 0.");
+            if (string.IsNullOrWhiteSpace(reason))
+                throw new ArgumentException("Lý do thưởng (reason) không được để trống.");
+
+            double calculatedBonus = rate * referenceAmount;
+            // Tái sử dụng logic qua phiên bản addBonus(amount, reason)
+            addBonus(calculatedBonus, $"{reason.Trim()} [{rate * 100}% của {referenceAmount:N0}]");
+        }
+
+        // Đặt lại thưởng khi bắt đầu kỳ lương mới
+        public void resetBonus()
+        {
+            MonthlyBonus = 0;
+            bonusHistory.Clear();
+        }
+
+        // Các phương thức đa hình
+        public abstract double calculateGrossPay();
+        public abstract string getEmployeeType();
+
+        public virtual void displayPayrollInfo()
+        {
+            Console.WriteLine($"[{EmployeeId}] {FullName} | Phòng: {Department} | Loại: {getEmployeeType()}");
+        }
+    }
+
+    // B.2. Lớp SalariedEmployee - Nhân viên hưởng lương cố định
+    public class SalariedEmployee : Employee
+    {
+        private double monthlySalary;
+        private double responsibilityAllowance;
+
+        public double MonthlySalary
+        {
+            get => monthlySalary;
+            private set
+            {
+                if (value < 0)
+                    throw new ArgumentException("Lương cố định tháng không được âm.");
+                monthlySalary = value;
+            }
+        }
+
+        public double ResponsibilityAllowance
+        {
+            get => responsibilityAllowance;
+            private set
+            {
+                if (value < 0)
+                    throw new ArgumentException("Phụ cấp trách nhiệm không được âm.");
+                responsibilityAllowance = value;
+            }
+        }
+
+        // Constructor đầy đủ
+        public SalariedEmployee(string employeeId, string fullName, string department, double monthlySalary, double responsibilityAllowance)
+            : base(employeeId, fullName, department)
+        {
+            MonthlySalary = monthlySalary;
+            ResponsibilityAllowance = responsibilityAllowance;
+        }
+
+        // Constructor rút gọn (ủy quyền sang constructor đầy đủ)
+        public SalariedEmployee(string employeeId, string fullName, double monthlySalary)
+            : this(employeeId, fullName, "Unassigned", monthlySalary, 0)
+        {
+        }
+
+        public override double calculateGrossPay()
+        {
+            return MonthlySalary + ResponsibilityAllowance + MonthlyBonus;
+        }
+
+        public override string getEmployeeType()
+        {
+            return "Salaried Employee (Lương cố định)";
+        }
+
+        public override void displayPayrollInfo()
+        {
+            base.displayPayrollInfo();
+            Console.WriteLine($"   + Lương cố định : {MonthlySalary:N0} VNĐ");
+            Console.WriteLine($"   + Phụ cấp       : {ResponsibilityAllowance:N0} VNĐ");
+            Console.WriteLine($"   + Tổng thưởng   : {MonthlyBonus:N0} VNĐ");
+            Console.WriteLine($"   => THU NHẬP     : {calculateGrossPay():N0} VNĐ");
+        }
+    }
+
+    // B.3. Lớp HourlyEmployee - Nhân viên hưởng lương theo giờ
+    public class HourlyEmployee : Employee
+    {
+        private double hourlyRate;
+        private double workedHours;
+
+        public double HourlyRate
+        {
+            get => hourlyRate;
+            private set
+            {
+                if (value <= 0)
+                    throw new ArgumentException("Đơn giá giờ phải lớn hơn 0.");
+                hourlyRate = value;
+            }
+        }
+
+        public double WorkedHours
+        {
+            get => workedHours;
+            private set
+            {
+                if (value < 0 || value > 250)
+                    throw new ArgumentException("Số giờ làm hợp lệ phải nằm trong khoảng từ 0 đến 250 giờ.");
+                workedHours = value;
+            }
+        }
+
+        // Constructor đầy đủ
+        public HourlyEmployee(string employeeId, string fullName, string department, double hourlyRate, double workedHours)
+            : base(employeeId, fullName, department)
+        {
+            HourlyRate = hourlyRate;
+            WorkedHours = workedHours;
+        }
+
+        // Constructor rút gọn (ủy quyền sang constructor đầy đủ)
+        public HourlyEmployee(string employeeId, string fullName, double hourlyRate)
+            : this(employeeId, fullName, "Unassigned", hourlyRate, 0)
+        {
+        }
+
+        // Tính giờ thường và giờ vượt ngưỡng 160 từ trạng thái hiện có (không lưu biến dư thừa)
+        public double getRegularHours() => Math.Min(WorkedHours, 160);
+        public double getOvertimeHours() => Math.Max(0, WorkedHours - 160);
+        public double getRegularPay() => getRegularHours() * HourlyRate;
+        public double getOvertimePay() => getOvertimeHours() * HourlyRate * 1.5;
+
+        public override double calculateGrossPay()
+        {
+            double basePay = getRegularPay() + getOvertimePay();
+            return basePay + MonthlyBonus;
+        }
+
+        public override string getEmployeeType()
+        {
+            return "Hourly Employee (Lương theo giờ)";
+        }
+
+        public override void displayPayrollInfo()
+        {
+            base.displayPayrollInfo();
+            Console.WriteLine($"   + Đơn giá giờ   : {HourlyRate:N0} VNĐ/giờ | Tổng số giờ: {WorkedHours}h (Giờ chuẩn: {getRegularHours()}h, Tăng ca: {getOvertimeHours()}h)");
+            Console.WriteLine($"   + Lương giờ chuẩn: {getRegularPay():N0} VNĐ | Lương tăng ca (x1.5): {getOvertimePay():N0} VNĐ");
+            Console.WriteLine($"   + Tổng thưởng   : {MonthlyBonus:N0} VNĐ");
+            Console.WriteLine($"   => THU NHẬP     : {calculateGrossPay():N0} VNĐ");
+        }
+    }
+
+    // B.4. Lớp SalesEmployee - Nhân viên kinh doanh
+    public class SalesEmployee : Employee
+    {
+        private double baseSalary;
+        private double salesRevenue;
+        private double commissionRate;
+
+        public double BaseSalary
+        {
+            get => baseSalary;
+            private set
+            {
+                if (value < 0)
+                    throw new ArgumentException("Lương cơ bản không được âm.");
+                baseSalary = value;
+            }
+        }
+
+        public double SalesRevenue
+        {
+            get => salesRevenue;
+            private set
+            {
+                if (value < 0)
+                    throw new ArgumentException("Doanh số không được âm.");
+                salesRevenue = value;
+            }
+        }
+
+        public double CommissionRate
+        {
+            get => commissionRate;
+            private set
+            {
+                if (value < 0 || value > 0.3)
+                    throw new ArgumentException("Tỷ lệ hoa hồng phải nằm trong khoảng từ 0 đến 0.3 (30%).");
+                commissionRate = value;
+            }
+        }
+
+        // Constructor đầy đủ
+        public SalesEmployee(string employeeId, string fullName, string department, double baseSalary, double salesRevenue, double commissionRate)
+            : base(employeeId, fullName, department)
+        {
+            BaseSalary = baseSalary;
+            SalesRevenue = salesRevenue;
+            CommissionRate = commissionRate;
+        }
+
+        // Constructor rút gọn (ủy quyền sang constructor đầy đủ)
+        public SalesEmployee(string employeeId, string fullName, double baseSalary, double commissionRate)
+            : this(employeeId, fullName, "Unassigned", baseSalary, 0, commissionRate)
+        {
+        }
+
+        // Phương thức cập nhật doanh số có kiểm soát
+        public void updateSalesRevenue(double newRevenue)
+        {
+            if (newRevenue < 0)
+                throw new ArgumentException("Doanh số cập nhật không được âm.");
+            SalesRevenue = newRevenue;
+        }
+
+        public double getCommissionAmount() => SalesRevenue * CommissionRate;
+
+        public override double calculateGrossPay()
+        {
+            return BaseSalary + getCommissionAmount() + MonthlyBonus;
+        }
+
+        public override string getEmployeeType()
+        {
+            return "Sales Employee (Nhân viên kinh doanh)";
+        }
+
+        public override void displayPayrollInfo()
+        {
+            base.displayPayrollInfo();
+            Console.WriteLine($"   + Lương cơ bản  : {BaseSalary:N0} VNĐ");
+            Console.WriteLine($"   + Doanh số      : {SalesRevenue:N0} VNĐ | Hoa hồng ({CommissionRate * 100}%): {getCommissionAmount():N0} VNĐ");
+            Console.WriteLine($"   + Tổng thưởng   : {MonthlyBonus:N0} VNĐ");
+            Console.WriteLine($"   => THU NHẬP     : {calculateGrossPay():N0} VNĐ");
+        }
+    }
+
+    // B.5. Lớp Payroll - Quản lý danh sách nhân sự và tổng hợp bảng lương (A.7)
+    public class Payroll
+    {
+        private string period;
+        private readonly List<Employee> employees;
+
+        public string Period
+        {
+            get => period;
+            private set
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                    throw new ArgumentException("Kỳ lương không được để trống.");
+                period = value.Trim();
+            }
+        }
+
+        public Payroll(string period)
+        {
+            Period = period;
+            employees = new List<Employee>();
+        }
+
+        public void addEmployee(Employee employee)
+        {
+            if (employee == null)
+                throw new ArgumentNullException(nameof(employee), "Đối tượng nhân sự không được null.");
+
+            if (findEmployee(employee.EmployeeId) != null)
+                throw new InvalidOperationException($"Lỗi: Nhân sự có mã '{employee.EmployeeId}' đã tồn tại trong bảng lương kỳ {Period}.");
+
+            employees.Add(employee);
+        }
+
+        public Employee findEmployee(string employeeId)
+        {
+            if (string.IsNullOrWhiteSpace(employeeId))
+                return null;
+
+            foreach (Employee emp in employees)
+            {
+                if (emp.EmployeeId.Equals(employeeId.Trim(), StringComparison.OrdinalIgnoreCase))
+                    return emp;
+            }
+            return null;
+        }
+
+        public double calculateTotalPayroll()
+        {
+            double total = 0;
+            foreach (Employee emp in employees)
+            {
+                // Lời gọi đa hình qua kiểu chung Employee, tuyệt đối không dùng if/else theo loại nhân sự
+                total += emp.calculateGrossPay();
+            }
+            return total;
+        }
+
+        public double calculatePayrollByDepartment(string department)
+        {
+            if (string.IsNullOrWhiteSpace(department))
+                return 0;
+
+            double total = 0;
+            foreach (Employee emp in employees)
+            {
+                if (emp.Department.Equals(department.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    total += emp.calculateGrossPay();
+                }
+            }
+            return total;
+        }
+
+        public Employee findHighestPaidEmployee()
+        {
+            if (employees.Count == 0)
+                return null;
+
+            Employee highest = employees[0];
+            double maxPay = highest.calculateGrossPay();
+
+            for (int i = 1; i < employees.Count; i++)
+            {
+                double currentPay = employees[i].calculateGrossPay();
+                if (currentPay > maxPay)
+                {
+                    maxPay = currentPay;
+                    highest = employees[i];
+                }
+            }
+            return highest;
+        }
+
+        public void displayPayroll()
+        {
+            Console.WriteLine(new string('=', 75));
+            Console.WriteLine($"BẢNG LƯƠNG DOANH NGHIỆP - KỲ LƯƠNG: {Period}");
+            Console.WriteLine(new string('=', 75));
+
+            if (employees.Count == 0)
+            {
+                Console.WriteLine("Danh sách bảng lương hiện đang rỗng.");
+                Console.WriteLine(new string('=', 75));
+                return;
+            }
+
+            foreach (Employee emp in employees)
+            {
+                emp.displayPayrollInfo();
+                Console.WriteLine(new string('-', 75));
+            }
+
+            Console.WriteLine($"TỔNG QUỸ LƯƠNG TOÀN CÔNG TY : {calculateTotalPayroll():N0} VNĐ");
+            Employee topEmp = findHighestPaidEmployee();
+            if (topEmp != null)
+            {
+                Console.WriteLine($"NHÂN SỰ THU NHẬP CAO NHẤT   : [{topEmp.EmployeeId}] {topEmp.FullName} ({topEmp.calculateGrossPay():N0} VNĐ)");
+            }
+            Console.WriteLine(new string('=', 75));
+        }
+    }
+
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            // Hỗ trợ hiển thị tiếng Việt có dấu trên Console
+            Console.OutputEncoding = Encoding.UTF8;
+
+            Console.WriteLine("=== PHẦN C: KIỂM THỬ DỮ LIỆU CHUẨN THEO ĐỀ BÀI ===\n");
+
+            Payroll payroll = new Payroll("2026-09");
+
+            // 1. Nhân viên lương cố định: E001
+            SalariedEmployee e001 = new SalariedEmployee(
+                employeeId: "E001",
+                fullName: "Nguyễn Minh An",
+                department: "Đào tạo",
+                monthlySalary: 15_000_000,
+                responsibilityAllowance: 2_000_000
+            );
+            e001.addBonus(1_000_000); // Gọi addBonus(amount) -> Kỳ vọng thu nhập: 18.000.000
+
+            // 2. Nhân viên theo giờ, không có giờ vượt ngưỡng: E002
+            HourlyEmployee e002 = new HourlyEmployee(
+                employeeId: "E002",
+                fullName: "Trần Thu Bình",
+                department: "Hỗ trợ",
+                hourlyRate: 100_000,
+                workedHours: 150
+            );
+            e002.addBonus(500_000, "Hỗ trợ khách hàng xuất sắc"); // Gọi addBonus(amount, reason) -> Kỳ vọng: 15.500.000
+
+            // 3. Nhân viên theo giờ, có giờ vượt ngưỡng: E003
+            HourlyEmployee e003 = new HourlyEmployee(
+                employeeId: "E003",
+                fullName: "Lê Hoàng Chi",
+                department: "Hỗ trợ",
+                hourlyRate: 100_000,
+                workedHours: 170
+            );
+            // Không có thưởng -> Kỳ vọng: 160*100.000 + 10*100.000*1.5 = 17.500.000
+
+            // 4. Nhân viên kinh doanh: E004
+            SalesEmployee e004 = new SalesEmployee(
+                employeeId: "E004",
+                fullName: "Phạm Quốc Dũng",
+                department: "Kinh doanh",
+                baseSalary: 8_000_000,
+                salesRevenue: 200_000_000,
+                commissionRate: 0.05
+            );
+            e004.addBonus(0.02, 50_000_000, "Thưởng vượt chỉ tiêu quý"); // Gọi addBonus(rate, referenceAmount, reason) -> Kỳ vọng: 19.000.000
+
+            // Thêm vào bảng lương
+            payroll.addEmployee(e001);
+            payroll.addEmployee(e002);
+            payroll.addEmployee(e003);
+            payroll.addEmployee(e004);
+
+            // Hiển thị toàn bộ bảng lương
+            payroll.displayPayroll();
+
+            // Kiểm tra tổng của phòng Hỗ trợ
+            double supportDeptTotal = payroll.calculatePayrollByDepartment("Hỗ trợ");
+            Console.WriteLine($"Tổng thu nhập phòng 'Hỗ trợ' : {supportDeptTotal:N0} VNĐ (Mong đợi: 33,000,000 VNĐ)\n");
+
+            // =========================================================================
+            // C.1. KIỂM THỬ BIÊN VÀ KIỂM THỬ LỖI (12 TÌNH HUỐNG KIỂM THỬ)
+            // =========================================================================
+            Console.WriteLine("=== PHẦN C.1: 12 TÌNH HUỐNG KIỂM THỬ BIÊN VÀ KIỂM THỬ LỖI ===\n");
+
+            RunTest("Test 01 - Mã nhân sự rỗng", () =>
+            {
+                var emp = new SalariedEmployee("", "Nguyễn Văn A", 10_000_000);
+            });
+
+            RunTest("Test 02 - Lương cố định âm", () =>
+            {
+                var emp = new SalariedEmployee("E005", "Nguyễn Văn B", "IT", -5_000_000, 1_000_000);
+            });
+
+            RunTest("Test 03 - Số giờ làm vượt ngưỡng tối đa (> 250 giờ)", () =>
+            {
+                var emp = new HourlyEmployee("E006", "Lê Văn C", "Hỗ trợ", 100_000, 251);
+            });
+
+            RunTest("Test 04 - Số giờ làm ở biên hợp lệ tối đa (= 250 giờ)", () =>
+            {
+                var emp = new HourlyEmployee("E007", "Lê Văn D", "Hỗ trợ", 100_000, 250);
+                Console.WriteLine($"   -> Thành công! Thu nhập cho 250h: {emp.calculateGrossPay():N0} VNĐ");
+            });
+
+            RunTest("Test 05 - Tỷ lệ hoa hồng vượt quá 0.3 (35%)", () =>
+            {
+                var emp = new SalesEmployee("E008", "Phạm Văn E", "Kinh doanh", 8_000_000, 100_000_000, 0.35);
+            });
+
+            RunTest("Test 06 - Thêm tiền thưởng <= 0", () =>
+            {
+                e001.addBonus(0);
+            });
+
+            RunTest("Test 07 - Thêm thưởng kèm lý do bị rỗng", () =>
+            {
+                e001.addBonus(500_000, "   ");
+            });
+
+            RunTest("Test 08 - Thêm thưởng theo tỷ lệ vượt quá 0.5 (60%)", () =>
+            {
+                e004.addBonus(0.6, 10_000_000, "Thưởng nóng");
+            });
+
+            RunTest("Test 09 - Thêm nhân sự trùng mã E001 vào Payroll", () =>
+            {
+                var duplicateEmp = new SalariedEmployee("E001", "Người Trùng Mã", 12_000_000);
+                payroll.addEmployee(duplicateEmp);
+            });
+
+            RunTest("Test 10 - Bảng lương rỗng (Kiểm tra tính tổng và tìm người lương cao nhất)", () =>
+            {
+                Payroll emptyPayroll = new Payroll("2026-10");
+                Console.WriteLine($"   -> Tổng bảng lương rỗng: {emptyPayroll.calculateTotalPayroll():N0} VNĐ");
+                Console.WriteLine($"   -> Người lương cao nhất: {(emptyPayroll.findHighestPaidEmployee() == null ? "null (An toàn)" : "Có dữ liệu")}");
+            });
+
+            RunTest("Test 11 - Cập nhật doanh số âm cho SalesEmployee", () =>
+            {
+                e004.updateSalesRevenue(-10_000_000);
+            });
+
+            RunTest("Test 12 - Kiểm thử constructor rút gọn và đặt lại thưởng resetBonus()", () =>
+            {
+                var shortEmp = new SalariedEmployee("E099", "Trần Rút Gọn", 10_000_000);
+                shortEmp.addBonus(2_000_000);
+                Console.WriteLine($"   -> Phòng ban mặc định: '{shortEmp.Department}', Thu nhập khi có thưởng: {shortEmp.calculateGrossPay():N0} VNĐ");
+                shortEmp.resetBonus();
+                Console.WriteLine($"   -> Thu nhập sau khi gọi resetBonus(): {shortEmp.calculateGrossPay():N0} VNĐ");
+            });
+
+            Console.WriteLine("\nNhấn phím bất kỳ để kết thúc...");
+            Console.ReadKey();
+        }
+
+        // Hàm hỗ trợ chạy và bắt ngoại lệ cho các ca kiểm thử
+        static void RunTest(string testName, Action testAction)
+        {
+            Console.WriteLine($"[{testName}]");
+            try
+            {
+                testAction();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"   -> Đã bắt lỗi hợp lệ ({ex.GetType().Name}): {ex.Message}");
+            }
+        }
+    }
+}
